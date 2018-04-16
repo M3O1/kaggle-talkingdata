@@ -68,7 +68,7 @@ class KGDataFrame(object):
 
         # 조건문 집합에 해당하는 row와 column
         self.target_rows = None  # row의 index 집합
-        self.target_columns = None  # column의 name 집합
+        self.target_columns = self.col_names  # column의 name 집합
 
     def _intersect_index(self, curr_index):
         if self.target_rows is None:
@@ -230,14 +230,19 @@ class KGDataFrame(object):
         start = time.time()
         if self.verbose:
             print("start to get dataframe from File")
+        
         if self.target_rows is None:
-            if self.verbose:
-                print("consumed time ---- {}".format(time.time()-start))
-            return pd.read_hdf(self.data_path, self.key, columns=self.target_columns)
+            output = pd.read_hdf(self.data_path, self.key+"_raw").loc[:,self.target_columns]
         else:
-            if self.verbose:
-                print("consumed time ---- {}".format(time.time()-start))
-            return pd.read_hdf(self.data_path, self.key, where=self.target_rows, columns=self.target_columns)
+            if len(self.target_rows)>=10**7:
+                output = pd.read_hdf(self.data_path, self.key+"_raw").loc[self.target_rows,self.target_columns]
+            else:
+                output = pd.read_hdf(self.data_path, self.key, where=self.target_rows, columns=self.target_columns)
+        gc.collect()
+
+        if self.verbose:
+            print("consumed time ---- {}".format(time.time()-start))
+        return output
 
     def get_dataframe(self):
         gc.collect()
@@ -290,7 +295,7 @@ def set_hdf5_from_csv(csv_path="/home/ubuntu/data/train.csv",
                       hdf5_path="/home/ubuntu/data/dataset.h5",
                       key='train'):
     if key == 'train':
-        train_df = pd.read_csv("../../data/train.csv",
+        train_df = pd.read_csv(csv_path,
                                parse_dates=["click_time", "attributed_time"])
         # difference time for attributed time and click time
         train_df['diff_time'] = train_df.attributed_time - train_df.click_time
@@ -299,23 +304,15 @@ def set_hdf5_from_csv(csv_path="/home/ubuntu/data/train.csv",
             train_df.os * (10**6) + train_df.device * (10**9)
         # convert to boolean type
         train_df.is_attributed = train_df.is_attributed.astype(bool)
-        # converting to Categorical type
-        train_df.os = train_df.os.astype('category')
-        train_df.app = train_df.app.astype('category')
-        train_df.device = train_df.device.astype('category')
-        train_df.channel = train_df.channel.astype('category')
         # Save to hdf5 format
         train_df.to_hdf(hdf5_path, key=key, format="table", data_columns=True)
+        train_df.to_hdf(hdf5_path, key=key+"_raw",format='fixed')
     elif key == 'test':
         # difference time for attributed time and click time
         test_df = pd.read_csv(csv_path, parse_dates=['click_time'])
         # set unique_id
         test_df['unique_id'] = test_df.ip + test_df.os * \
             (10**6) + test_df.device * (10**9)
-        # converting to Categorical type
-        test_df.os = test_df.os.astype('category')
-        test_df.app = test_df.app.astype('category')
-        test_df.device = test_df.device.astype('category')
-        test_df.channel = test_df.channel.astype('category')
         # Save to hdf5 format
         test_df.to_hdf(hdf5_path, key=key, format='table', data_columns=True)
+        test_df.to_hdf(hdf5_path, key=key+"_raw",format='fixed')
